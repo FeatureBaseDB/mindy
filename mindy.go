@@ -32,7 +32,10 @@ func (m *Main) Run() error {
 	if err != nil {
 		return errors.Wrap(err, "creating Pilosa client")
 	}
-	h := &Handler{client: client}
+	h := &Handler{
+		client: client,
+		sem:    make(semaphore, 2), // length of semaphore is number of concurrent goroutines querying pilosa.
+	}
 
 	sm := http.NewServeMux()
 	sm.HandleFunc("/mindy", h.handleMindy)
@@ -56,8 +59,19 @@ type Request struct {
 	Conjunction string   `json:"conjunction"`
 }
 
+type semaphore chan struct{}
+
+func (s semaphore) Acquire() {
+	s <- struct{}{}
+}
+
+func (s semaphore) Release() {
+	<-s
+}
+
 type Handler struct {
 	client *pilosa.Client
+	sem    semaphore
 }
 
 func (h *Handler) handleMindy(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +87,7 @@ func (h *Handler) handleMindy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results, err := Query(req)
+	results, err := h.Query(req)
 	if err != nil {
 		http.Error(w, "querying pilosa: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -91,6 +105,9 @@ func (h *Handler) handleMindy(w http.ResponseWriter, r *http.Request) {
 type Results struct {
 }
 
-func Query(r *Request) (*Results, error) {
+func (h *Handler) Query(r *Request) (*Results, error) {
+	h.sem.Acquire()
+	defer h.sem.Release()
+
 	return nil, errors.New("Query unimplemented")
 }
