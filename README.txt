@@ -1,9 +1,10 @@
 Mindy - a Multi-INDex proxY.
 
 Get:
-go get -u github.com/pilosa/mindy/cmd/mindy
+go get github.com/pilosa/mindy/cmd/mindy
 
 Build:
+dep ensure
 go install github.com/pilosa/mindy/cmd/mindy
 
 Running:
