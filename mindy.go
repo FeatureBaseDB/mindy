@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"golang.org/x/sync/errgroup"
 
@@ -106,7 +107,15 @@ func (h *Handler) handleMindy(w http.ResponseWriter, r *http.Request) {
 }
 
 type Results struct {
+	mu   sync.Mutex
 	Bits map[string][]uint64 `json:"bits"`
+}
+
+func (r *Results) setIndex(idx string, bits []uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.Bits[idx] = bits
 }
 
 func (h *Handler) Query(r *Request) (*Results, error) {
@@ -124,7 +133,7 @@ func (h *Handler) Query(r *Request) (*Results, error) {
 			if err != nil {
 				return err
 			}
-			results.Bits[i] = bits
+			results.setIndex(i, bits)
 			return nil
 		})
 	}
