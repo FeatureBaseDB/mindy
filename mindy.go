@@ -158,9 +158,8 @@ func (h *Handler) queryIndex(idx string, r *Request) ([]uint64, error) {
 		return nil, fmt.Errorf("getting index %s from schema: %v", idx, err)
 	}
 
+	// Includes.
 	var includes []*pilosa.PQLBitmapQuery
-	//var excludes []*pilosa.PQLBitmapQuery // TODO: implement excludes
-
 	for _, row := range r.Includes {
 		frame, err := index.Frame(row.Frame)
 		if err != nil {
@@ -169,20 +168,49 @@ func (h *Handler) queryIndex(idx string, r *Request) ([]uint64, error) {
 		includes = append(includes, frame.Bitmap(row.ID))
 	}
 
-	var qry *pilosa.PQLBitmapQuery
-	// TODO: only handle specific conjunctions. error on the others.
-	if r.Conjunction == "and" {
-		qry = index.Intersect(includes...)
-	} else {
-		qry = index.Union(includes...)
+	// Excludes.
+	var excludes []*pilosa.PQLBitmapQuery
+	for _, row := range r.Excludes {
+		frame, err := index.Frame(row.Frame)
+		if err != nil {
+			return nil, fmt.Errorf("getting frame %s from index %s: %v", row.Frame, idx, err)
+		}
+		excludes = append(excludes, frame.Bitmap(row.ID))
 	}
 
+	// Conjuction: Intersect, Union.
+	var qry *pilosa.PQLBitmapQuery
+	switch r.Conjunction {
+	case "and":
+		qry = index.Intersect(includes...)
+	case "or":
+		qry = index.Union(includes...)
+	default:
+		return nil, fmt.Errorf("invalid conjunction: %s", r.Conjunction)
+	}
+
+	// Difference.
+	if len(excludes) > 0 {
+		var diffArgs []*pilosa.PQLBitmapQuery
+		// The first argument to Difference is the conjuction query.
+		diffArgs = append(diffArgs, qry)
+		for _, e := range excludes {
+			diffArgs = append(diffArgs, e)
+		}
+		qry = index.Difference(diffArgs...)
+	}
+
+	// Perform the query.
 	response, err := h.client.Query(qry)
 	if err != nil {
 		return nil, fmt.Errorf("querying index %s: %v", idx, err)
 	}
-	resp := response.ResultList[0] // TODO: check slice length
-	bitmap := resp.Bitmap
 
-	return bitmap.Bits, nil
+	// Since this isn't a batch query, there should be exactly one result.
+	if len(response.ResultList) != 1 {
+		return nil, fmt.Errorf("expected 1 result but got %d", len(response.ResultList))
+	}
+	resp := response.ResultList[0]
+
+	return resp.Bitmap.Bits, nil
 }
