@@ -9,7 +9,11 @@ package mindy
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/pilosa/go-pilosa"
 	"github.com/pkg/errors"
@@ -103,11 +107,82 @@ func (h *Handler) handleMindy(w http.ResponseWriter, r *http.Request) {
 }
 
 type Results struct {
+	mu   sync.Mutex
+	Bits map[string][]uint64 `json:"bits"`
+}
+
+func (r *Results) setIndex(idx string, bits []uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.Bits[idx] = bits
 }
 
 func (h *Handler) Query(r *Request) (*Results, error) {
+
+	results := &Results{
+		Bits: make(map[string][]uint64),
+	}
+
+	var eg errgroup.Group
+
+	for _, i := range r.Indexes {
+		i := i // required for closure
+		eg.Go(func() error {
+			bits, err := h.queryIndex(i, r)
+			if err != nil {
+				return err
+			}
+			results.setIndex(i, bits)
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	return results, nil
+}
+
+func (h *Handler) queryIndex(idx string, r *Request) ([]uint64, error) {
 	h.sem.Acquire()
 	defer h.sem.Release()
 
-	return nil, errors.New("Query unimplemented")
+	schema, err := h.client.Schema()
+	if err != nil {
+		return nil, fmt.Errorf("getting schema: %v", err)
+	}
+	index, err := schema.Index(idx)
+	if err != nil {
+		return nil, fmt.Errorf("getting index %s from schema: %v", idx, err)
+	}
+
+	var includes []*pilosa.PQLBitmapQuery
+	//var excludes []*pilosa.PQLBitmapQuery // TODO: implement excludes
+
+	for _, row := range r.Includes {
+		frame, err := index.Frame(row.Frame)
+		if err != nil {
+			return nil, fmt.Errorf("getting frame %s from index %s: %v", row.Frame, idx, err)
+		}
+		includes = append(includes, frame.Bitmap(row.ID))
+	}
+
+	var qry *pilosa.PQLBitmapQuery
+	// TODO: only handle specific conjunctions. error on the others.
+	if r.Conjunction == "and" {
+		qry = index.Intersect(includes...)
+	} else {
+		qry = index.Union(includes...)
+	}
+
+	response, err := h.client.Query(qry)
+	if err != nil {
+		return nil, fmt.Errorf("querying index %s: %v", idx, err)
+	}
+	resp := response.ResultList[0] // TODO: check slice length
+	bitmap := resp.Bitmap
+
+	return bitmap.Bits, nil
 }
