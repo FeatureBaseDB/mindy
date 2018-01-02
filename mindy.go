@@ -22,22 +22,24 @@ import (
 )
 
 type Main struct {
-	Pilosa []string `help:"Comma separated list of pilosa hosts/ports."`
-	Bind   string   `help:"Host/port to bind to."`
-	s      *http.Server
-	ln     net.Listener
+	Pilosa      []string `help:"Comma separated list of pilosa hosts/ports."`
+	Bind        string   `help:"Host/port to bind to."`
+	Concurrency int      `help:"Maximum number of simultaneous Pilosa requests."`
+	s           *http.Server
+	ln          net.Listener
 }
 
 func NewMain() *Main {
 	return &Main{
-		Pilosa: []string{"localhost:10101"},
-		Bind:   ":10001",
+		Pilosa:      []string{"localhost:10101"},
+		Bind:        ":10001",
+		Concurrency: 2,
 	}
 }
 func (m *Main) Run() error {
 	err := m.listen()
 	if err != nil {
-		errors.Wrap(err, "Main.listen")
+		return errors.Wrap(err, "Main.listen")
 	}
 	err = m.serve()
 	return errors.Wrap(err, "Main.serve")
@@ -54,7 +56,7 @@ func (m *Main) listen() error {
 	}
 	h := &Handler{
 		client: client,
-		sem:    make(semaphore, 2), // length of semaphore is number of concurrent goroutines querying pilosa.
+		sem:    make(semaphore, m.Concurrency), // length of semaphore is number of concurrent goroutines querying pilosa.
 	}
 
 	sm := http.NewServeMux()
