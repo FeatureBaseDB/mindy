@@ -10,8 +10,10 @@ package mindy
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -22,6 +24,8 @@ import (
 type Main struct {
 	Pilosa []string `help:"Comma separated list of pilosa hosts/ports."`
 	Bind   string   `help:"Host/port to bind to."`
+	s      *http.Server
+	ln     net.Listener
 }
 
 func NewMain() *Main {
@@ -30,8 +34,20 @@ func NewMain() *Main {
 		Bind:   ":10001",
 	}
 }
-
 func (m *Main) Run() error {
+	err := m.listen()
+	if err != nil {
+		errors.Wrap(err, "Main.listen")
+	}
+	err = m.serve()
+	return errors.Wrap(err, "Main.serve")
+}
+
+func (m *Main) serve() error {
+	return m.s.Serve(tcpKeepAliveListener{m.ln.(*net.TCPListener)})
+}
+
+func (m *Main) listen() error {
 	client, err := pilosa.NewClientFromAddresses(m.Pilosa, nil)
 	if err != nil {
 		return errors.Wrap(err, "creating Pilosa client")
@@ -43,12 +59,15 @@ func (m *Main) Run() error {
 
 	sm := http.NewServeMux()
 	sm.HandleFunc("/mindy", h.handleMindy)
-	s := &http.Server{
+	m.s = &http.Server{
 		Addr:    m.Bind,
 		Handler: sm,
 	}
-
-	return s.ListenAndServe()
+	if m.Bind == "" {
+		m.Bind = ":http"
+	}
+	m.ln, err = net.Listen("tcp", m.Bind)
+	return errors.Wrap(err, "starting listener")
 }
 
 type Row struct {
@@ -116,6 +135,28 @@ func (r *Results) setIndex(idx string, bits []uint64) {
 	defer r.mu.Unlock()
 
 	r.Bits[idx] = bits
+}
+
+func (r *Results) Equals(r2 *Results) error {
+	for prop, bits := range r.Bits {
+		if bits2, ok := r2.Bits[prop]; !ok {
+			return errors.Errorf("prop: '%v' in receiver, but not arg", prop)
+		} else if len(bits2) != len(bits) {
+			return errors.Errorf("different numbers of bits at prop: '%v", prop)
+		} else {
+			for i, _ := range bits {
+				if bits[i] != bits2[i] {
+					return errors.Errorf("bits not equal at prop '%v', index %d", prop, i)
+				}
+			}
+		}
+	}
+	for prop2, _ := range r2.Bits {
+		if _, ok := r.Bits[prop2]; !ok {
+			return errors.Errorf("prop: '%v' in arg, but not receiver", prop2)
+		}
+	}
+	return nil
 }
 
 func (h *Handler) Query(r *Request) (*Results, error) {
@@ -213,4 +254,18 @@ func (h *Handler) queryIndex(idx string, r *Request) ([]uint64, error) {
 	resp := response.ResultList[0]
 
 	return resp.Bitmap.Bits, nil
+}
+
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(3 * time.Minute)
+	return tc, nil
 }
