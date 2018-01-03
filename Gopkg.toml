@@ -27,8 +27,17 @@
 
 [[constraint]]
   name = "github.com/pilosa/go-pilosa"
-  version = "0.8.0"
+  branch = "query-slices"
+  source = "github.com/jaffee/go-pilosa"
+
+[[constraint]]
+  name = "github.com/pilosa/pilosa"
+  branch = "master"
 
 [[constraint]]
   name = "github.com/pkg/errors"
   version = "0.8.0"
+
+[[constraint]]
+  branch = "master"
+  name = "golang.org/x/sync"

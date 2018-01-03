@@ -1,6 +1,7 @@
 package mindy
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pilosa/go-pilosa"
@@ -13,7 +14,6 @@ func TestMindy(t *testing.T) {
 	populate(t, server.Server.Addr().String())
 
 	m := NewMain()
-
 	m.Pilosa = []string{server.Server.Addr().String()}
 	m.Bind = "localhost:33333"
 	err := m.listen()
@@ -29,7 +29,7 @@ func TestMindy(t *testing.T) {
 
 	tests := []struct {
 		req      *Request
-		expected *Results
+		expected map[string]struct{}
 	}{
 		{
 			req: &Request{
@@ -38,23 +38,27 @@ func TestMindy(t *testing.T) {
 				Excludes:    []Row{},
 				Conjunction: "and",
 			},
-			expected: &Results{
-				Bits: map[string][]uint64{
-					"p1":  bits(1, 2),
-					"two": []uint64{},
-					"p3":  bits(3, 6),
-				},
-			},
+			expected: bits(
+				iss{"p1", 1, 2},
+				iss{"p3", 3, 6},
+			),
 		},
 	}
 
 	for i, test := range tests {
-		res, err := client.Post(test.req)
+		scanner, err := client.Post(test.req)
 		if err != nil {
 			t.Fatalf("making request %d: %v", i, err)
 		}
-		if err := res.Equals(test.expected); err != nil {
-			t.Fatalf("inequality test %d: %v", i, err)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if _, ok := test.expected[line]; !ok {
+				t.Fatalf("test %d: '%s' in response, but not expected", i, line)
+			}
+			delete(test.expected, line)
+		}
+		if len(test.expected) > 0 {
+			t.Fatalf("test %d: leftover items in expected: %v", i, test.expected)
 		}
 	}
 }
@@ -104,10 +108,20 @@ func populate(t *testing.T, host string) {
 
 }
 
-func bits(start, step uint64) []uint64 {
-	res := make([]uint64, 0)
-	for i := start; i < 100; i += step {
-		res = append(res, i)
+// iss is index,start,step
+type iss struct {
+	index string
+	start uint64
+	step  uint64
+}
+
+// bits constructs a map of index,column pairs based on the passed in specs.
+func bits(specs ...iss) map[string]struct{} {
+	idxs := make(map[string]struct{})
+	for _, spec := range specs {
+		for i := spec.start; i < 100; i += spec.step {
+			idxs[fmt.Sprintf("%s,%d", spec.index, i)] = struct{}{}
+		}
 	}
-	return res
+	return idxs
 }

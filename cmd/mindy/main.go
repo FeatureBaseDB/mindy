@@ -3,20 +3,13 @@ package main
 import (
 	"log"
 
-	"github.com/jaffee/commandeer/cobradeer"
+	"github.com/jaffee/commandeer/cobrafy"
 	"github.com/pilosa/mindy"
 )
 
 func main() {
-
-	m := mindy.NewMain()
-	com, err := cobradeer.Cobra(m)
+	err := cobrafy.Execute(mindy.NewMain())
 	if err != nil {
-		log.Fatalf("creating command: %v", err)
+		log.Fatalf("executing mindy: %v", err)
 	}
-	err = com.Execute()
-	if err != nil {
-		log.Fatalf("executing command: %v", err)
-	}
-
 }
