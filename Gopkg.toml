@@ -27,8 +27,7 @@
 
 [[constraint]]
   name = "github.com/pilosa/go-pilosa"
-  branch = "query-slices"
-  source = "github.com/jaffee/go-pilosa"
+  branch = "master"
 
 [[constraint]]
   name = "github.com/pilosa/pilosa"

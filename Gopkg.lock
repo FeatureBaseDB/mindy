@@ -128,11 +128,10 @@
   version = "v1.0.1"
 
 [[projects]]
-  branch = "query-slices"
+  branch = "master"
   name = "github.com/pilosa/go-pilosa"
   packages = [".","gopilosa_pbuf"]
-  revision = "3df0062f3445eb7b072246049501ef23872fbb78"
-  source = "github.com/jaffee/go-pilosa"
+  revision = "46c8a6273bde64f0513a3e5451563fc60f5a3fe0"
 
 [[projects]]
   branch = "master"
@@ -221,6 +220,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "a70e25cf3886ce3cf7dbfb8469280a24307cc0f31cfde5964eec28e64a86a75d"
+  inputs-digest = "c2da5f1634c92bbbe48f0437ada6b43306c8a15e97ef084872f73c43233f92b5"
   solver-name = "gps-cdcl"
   solver-version = 1
