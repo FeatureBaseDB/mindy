@@ -1,0 +1,41 @@
+Mindy - a Multi-INDex proxY.
+
+*** Get
+(Assuming you've installed Go)
+#+BEGIN_SRC bash
+go get github.com/pilosa/mindy/cmd/mindy
+#+END_SRC
+This may throw errors, but it should clone the repository into your GOPATH.
+
+*** Build
+(Assuming you've installed dep)
+#+BEGIN_SRC bash
+dep ensure
+go install github.com/pilosa/mindy/cmd/mindy
+#+END_SRC
+
+*** Running
+To see most up to date help: =mindy -h=
+
+*** Use
+Mindy starts a server at (by default) =localhost:10001=. It accepts queries of
+the form mindy.Request (in json), then constructs a Pilosa query, queries Pilosa
+index by index and slice by slice, and streams results back line by line in the
+form =<index>,<column>=.
+
+*** Example
+Running mindy with defaults, one might submit a request as follows:
+#+BEGIN_SRC bash
+curl -XPOST localhost:10001/mindy -d '
+{
+  "indexes":["1"], 
+  "includes":[{"frame":"a","id":1}], 
+  "excludes":[], 
+  "conjunction":"and"
+}'
+#+END_SRC
+
+Results can be read back a line at a time as they become available. Look at
+client.go and how it is used in =mindy_test.go= for an example of doing this in
+Go.
+

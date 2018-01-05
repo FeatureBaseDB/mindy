@@ -1,8 +1,10 @@
 package mindy
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/pkg/errors"
@@ -13,7 +15,7 @@ type Client struct {
 	client *http.Client
 }
 
-func (c *Client) Post(r *Request) (*Results, error) {
+func (c *Client) Post(r *Request) (*bufio.Scanner, error) {
 	if c.client == nil {
 		c.client = http.DefaultClient
 	}
@@ -26,11 +28,9 @@ func (c *Client) Post(r *Request) (*Results, error) {
 		return nil, errors.Wrap(err, "making request")
 	}
 	if resp.StatusCode > 299 {
-		return nil, errors.Errorf("unexpected response status code: %d", resp.StatusCode)
+		bod, _ := ioutil.ReadAll(resp.Body)
+		return nil, errors.Errorf("unexpected response status code: %d. body: %v", resp.StatusCode, string(bod))
 	}
-	dec := json.NewDecoder(resp.Body)
-	res := &Results{}
-	err = dec.Decode(res)
-
-	return res, errors.Wrap(err, "decoding response")
+	bs := bufio.NewScanner(resp.Body)
+	return bs, nil
 }
